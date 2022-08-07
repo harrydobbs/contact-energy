@@ -57,11 +57,13 @@ class Contact_Energy_API():
             start = period.to_timestamp().strftime('%Y-%m-%d')
             end = period.to_timestamp(how="E").strftime('%Y-%m-%d')
         
-            q = self.query(start, end, interval="hourly").json()
+            queries = self.query(start, end, interval="hourly").json()
+            
+            for q in queries:
+                hourly_usage[f'{q["date"]}'] = f'{q["value"]}'
+        
 
-            hourly_usage[f'{q["date"]}'] = f'{q["value"]}'
-
-        return json.dumps(hourly_usage, indent = 4)  
+        return hourly_usage
         
 
 
@@ -70,18 +72,43 @@ class Visualizer():
     def __init__(self):
         pass
 
+    def hourly_usage_graph(self, json):
+
+        df = pd.read_json(json, orient='index')
+        df = df.reset_index(level=0)
+        df = df.set_axis(['Time-Date', 'Power (KwH)'], axis=1, inplace=False)
+
+        df.iloc[:,0] = pd.to_datetime(df.iloc[:,0], format='%Y-%m-%d %H:%M:%S', utc=True)
+        
+        df['Hour'] = df['Time-Date'].dt.strftime('%H')
+
+        print(df.groupby(df['Hour']).sum())
+
+        print(((df.groupby(df['Hour']).sum() / df.groupby(['Hour']).sum().sum()) * 100).round(decimals=2))
+
+        return df
+
+
 
 
 
 if __name__ == "__main__":
 
+    vis = Visualizer()
+
     api = Contact_Energy_API()
     api.login()
-    api.query()
+    #api.query()
 
-    hourly_usage = api.hourly_power()
+    #hourly_usage = api.hourly_power(start="2021-11-17", end="2022-08-06")
+    #last_week = api.hourly_power(start="2022-08-01", end="2022-08-06")
 
 
+    #with open('last_week.json', 'w') as outfile:
+    #    json.dump(last_week, outfile, indent = 4)
+
+
+    vis.hourly_usage_graph('last_week.json')
 
 
 
