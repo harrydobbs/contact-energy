@@ -80,9 +80,11 @@ class Visualizer():
 
         df.iloc[:,0] = pd.to_datetime(df.iloc[:,0], format='%Y-%m-%d %H:%M:%S', utc=True)
         
-        df['Hour'] = df['Time-Date'].dt.strftime('%H')
+        #df['Hour'] = df['Time-Date'].dt.strftime('%H')
+        df['Day'] = df['Time-Date'].dt.strftime('%Y-%m-%d')
 
-        print(df.groupby(df['Hour']).sum())
+        #print(df.groupby(df['Hour']).sum())
+        print(df.groupby(df['Day']).sum())
 
         print(((df.groupby(df['Hour']).sum() / df.groupby(['Hour']).sum().sum()) * 100).round(decimals=2))
 
