@@ -4,6 +4,8 @@ import json
 
 from bs4 import BeautifulSoup
 from urllib.request import urlopen
+from datetime import datetime
+from tqdm import tqdm
 
 import creds
 
@@ -53,42 +55,46 @@ class Contact_Energy_API():
                                   end=end,
                                   freq='D')
 
-        for period in periods.values:
+        for period in tqdm(periods.values):
             start = period.to_timestamp().strftime('%Y-%m-%d')
             end = period.to_timestamp(how="E").strftime('%Y-%m-%d')
         
             queries = self.query(start, end, interval="hourly").json()
             
             for q in queries:
-                hourly_usage[f'{q["date"]}'] = f'{q["value"]}'
+                hourly_usage[q["date"]] = q["value"]
         
 
         return hourly_usage
         
 
 
-class Visualizer():
+class Stats():
 
     def __init__(self):
         pass
 
-    def hourly_usage_graph(self, json):
+    def hourly_usage_df(self, json):
 
         df = pd.read_json(json, orient='index')
         df = df.reset_index(level=0)
-        df = df.set_axis(['Time-Date', 'Power (KwH)'], axis=1, inplace=False)
+        df = df.set_axis(['Datetime', 'kWH'], axis=1, inplace=False)
 
-        df.iloc[:,0] = pd.to_datetime(df.iloc[:,0], format='%Y-%m-%d %H:%M:%S', utc=True)
+        #print(df['Datetime'].apply(lambda v: isinstance(v, datetime)).sum())
         
-        #df['Hour'] = df['Time-Date'].dt.strftime('%H')
-        df['Day'] = df['Time-Date'].dt.strftime('%Y-%m-%d')
+        df[['Datetime', 'Timezone']] = df['Datetime'].astype(str).str.rsplit('+', n=1, expand=True)
+        df['Datetime'] = pd.to_datetime(df['Datetime'], utc=True)
+        df['Timezone'] = pd.to_datetime(df['Timezone'])
 
-        #print(df.groupby(df['Hour']).sum())
-        print(df.groupby(df['Day']).sum())
 
-        print(((df.groupby(df['Hour']).sum() / df.groupby(['Hour']).sum().sum()) * 100).round(decimals=2))
+        df['Hour'] = df['Datetime'].dt.strftime('%H')
+        df['Day'] = df['Datetime'].dt.strftime('%Y-%m-%d')
 
-        return df
+
+        hour_df = df.groupby(df['Hour']).sum()
+        hour_df["%"] = ((hour_df / hour_df.sum()) * 100).round(decimals=2)
+
+        return df, hour_df
 
 
 
@@ -96,58 +102,35 @@ class Visualizer():
 
 if __name__ == "__main__":
 
-    vis = Visualizer()
+    stats = Stats()
 
-    api = Contact_Energy_API()
-    api.login()
+    #api = Contact_Energy_API()
+    #api.login()
     #api.query()
 
-    #hourly_usage = api.hourly_power(start="2021-11-17", end="2022-08-06")
+    #hourly_usage = api.hourly_power(start="2021-11-17", end="2022-08-05")
+
     #last_week = api.hourly_power(start="2022-08-01", end="2022-08-06")
 
-
-    #with open('last_week.json', 'w') as outfile:
-    #    json.dump(last_week, outfile, indent = 4)
-
-
-    vis.hourly_usage_graph('last_week.json')
+    #with open('hourly_usage.json', 'w') as outfile:
+    #    json.dump(hourly_usage, outfile, indent = 4)
 
 
+    df, hour_df = stats.hourly_usage_df('hourly_usage.json')
 
+    current_plan_fixed = 1.059 
+    current_plan_cost_per_kWh = 0.2050
+    current_plan_discount = 0.98 # 2percent
 
-s = requests.session() 
-login = s.post(login_url, data=creds.payload)
-auth_token = str(login.json()['Data']['Token'])
+    good_night_fixed = 1.969
+    good_night_cost_per_kwh = 0.2105
 
+    print("Current:")
+    print((df.shape[0]/24 * current_plan_fixed  + hour_df["kWH"].sum() * current_plan_cost_per_kWh)) # * current_plan_discount)
 
-#soup = BeautifulSoup
+    print('Free Hour:')
+    print((df.shape[0]/24 * good_night_fixed  + hour_df["kWH"][0:21].sum() * good_night_cost_per_kwh))
 
-
-
-
-
-
-
-#s = requests.session()
-#r = s.options('https://myaccount-api.genesisenergy.co.nz/api/authorize', data={'username':'MrX','password':'123'})
-#print(r.text)
-
-
-
-
-
-
-
-quit()
-
-url_to_scrape = "https://myaccount.contact.co.nz/usage"
-request_page = urlopen(url_to_scrape)
-page_html = request_page.read()
-request_page.close()
-
-soup = BeautifulSoup(page_html, 'html.parser')
-
-print(soup.prettify())
 
 
 
